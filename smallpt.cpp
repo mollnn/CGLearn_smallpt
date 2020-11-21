@@ -115,7 +115,7 @@ Vec radiance(const Ray &r, int depth, unsigned short *Xi)
 }
 int main(int argc, char *argv[])
 {
-    int w = 512, h = 384, samps = 4 /*argc==2 ? atoi(argv[1])/4 : 1*/; // # samples
+    int w = 256, h = 192, samps = 2 /*argc==2 ? atoi(argv[1])/4 : 1*/; // # samples
     Ray cam(Vec(50, 52, 295.6), Vec(0, -0.042612, -1).norm());            // cam pos, dir
     Vec cx = Vec(w * .5135 / h), cy = (cx % cam.d).norm() * .5135, r, *c = new Vec[w * h];
 #pragma omp parallel for schedule(dynamic, 1) private(r) // OpenMP
@@ -143,5 +143,5 @@ int main(int argc, char *argv[])
     FILE *f = fopen("image.ppm", "w"); // Write image to PPM file.
     fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
     for (int i = 0; i < w * h; i++)
-        fprintf(f, "%d %d %d ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
+        fprintf(f, "%d\n%d\n%d\n", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
 }
