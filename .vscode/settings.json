@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+        "iostream": "cpp",
+        "cmath": "cpp",
+        "*.tcc": "cpp",
+        "sstream": "cpp",
+        "regex": "cpp",
+        "iosfwd": "cpp",
+        "ratio": "cpp",
+        "ostream": "cpp",
+        "deque": "cpp",
+        "string": "cpp",
+        "vector": "cpp",
+        "new": "cpp"
+    },
+    "git.ignoreLimitWarning": true
+}
