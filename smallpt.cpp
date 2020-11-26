@@ -1,63 +1,8 @@
 #include <bits/stdc++.h>
-#include<windows.h>
-#pragma comment( lib,"winmm.lib" )
+#include "Timer.hpp"
+#include "Random.hpp"
 
-using namespace std;
 #define pi 3.1415926535897932384626433832795
-
-
-struct Timer
-{
-    LARGE_INTEGER t1, t2, tc;
-    void Start()//开始计时
-    {
-        QueryPerformanceFrequency(&tc);
-        QueryPerformanceCounter(&t1);
-    }
-    void End()//结束计时
-    {
-        QueryPerformanceCounter(&t2);
-    }
-    Timer()
-    {
-        Start();
-    }
-    double GetTime()// 获取计时结果
-    {
-        double ans = (t2.QuadPart - t1.QuadPart) * 1.0 / tc.QuadPart;
-        return ans;
-    }
-    void Print()// 直接打印计时结果
-    {
-        double ans = (t2.QuadPart - t1.QuadPart) * 1.0 / tc.QuadPart;
-        printf("%.6f", ans);
-    }
-};
-
-int STDRANDOM()
-{
-    return rand()*rand();
-}
-
-unsigned int xorshf96()
-{
-    static unsigned int x = STDRANDOM(), y = STDRANDOM(), z = STDRANDOM();
-    unsigned int t;
-    x ^= x << 16;
-    x ^= x >> 5;
-    x ^= x << 1;
-    t = x;
-    x = y;
-    y = z;
-    z = t ^ x ^ y;
-    return z;
-}
-
-// 随机数生成器
-double RAND(unsigned short seed[3])
-{
-    return (double)xorshf96() / (double)0xffffffffU;
-}
 
 // 3 维向量，用于空间向量和颜色的表示
 struct Vec
@@ -205,8 +150,8 @@ int main(int argc, char *argv[])
     srand(time(NULL));
 
     Timer timer;
-    int w = 256, h = 192, samps = 8; // # samples
-    Ray cam(Vec(50, 52, 295.6), Vec(0, -0.042612, -1).Normal());        // cam pos, dir
+    int w = 256, h = 192, samps = 8;                             // # samples
+    Ray cam(Vec(50, 52, 295.6), Vec(0, -0.042612, -1).Normal()); // cam pos, dir
     Vec cx = Vec(w * .5135 / h), cy = (cx % cam.direction).Normal() * .5135, ray, *c = new Vec[w * h];
 #pragma omp parallel for schedule(dynamic, 1) private(ray) // OpenMP
     for (int y = 0; y < h; y++)
@@ -228,7 +173,8 @@ int main(int argc, char *argv[])
                     } // Camera rays are pushed ^^^^^ forward to start in interior
                     c[i] = c[i] + Vec(ClampValue(ray.x), ClampValue(ray.y), ClampValue(ray.z)) * .25;
                 }
-        cout << "Rendering Progress: " << setiosflags(ios::fixed)<<setprecision(2)<<(double)((y+1)*100.0/h) <<"%"<< endl;
+        std::cout << "Rendering Progress: " << std::setiosflags(std::ios::fixed)
+                  << std::setprecision(2) << (double)((y + 1) * 100.0 / h) << "%" << std::endl;
     }
     FILE *f = fopen("image.ppm", "w"); // Write image to PPM file.
     fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
