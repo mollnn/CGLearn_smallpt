@@ -28,4 +28,9 @@ double RAND(unsigned short seed[3])
     return (double)xorshf96() / (double)0xffffffffU;
 }
 
+double RAND()
+{
+    return (double)xorshf96() / (double)0xffffffffU;
+}
+
 #endif

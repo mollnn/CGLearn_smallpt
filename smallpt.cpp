@@ -75,7 +75,7 @@ inline bool GetIntersect(const Ray &ray, double &t, int &id)
         }
     return t < inf;
 }
-Vector Radiance(const Ray &ray, int depth, unsigned short *nRandSeeds)
+Vector Radiance(const Ray &ray, int depth)
 {
     double dist; // distance to intersection
     int id = 0;  // id of intersected object
@@ -94,24 +94,24 @@ Vector Radiance(const Ray &ray, int depth, unsigned short *nRandSeeds)
     if (depth > 100)
         return obj.emission; //  prevent stack overflow
     if (++depth > 5)
-        if (RAND(nRandSeeds) < p)
+        if (RAND() < p)
             objColor = objColor * (1 / p);
         else
             return obj.emission; //R.R.
     if (obj.material == DIFFUSE) // Ideal DIFFUSE reflection
     {
-        double r1 = 2 * pi * RAND(nRandSeeds);
-        double r2 = RAND(nRandSeeds);
+        double r1 = 2 * pi * RAND();
+        double r2 = RAND();
         double r2sqrt = sqrt(r2);
         Vector w = normal;
         Vector u = ((fabs(w.x) > .1 ? Vector(0, 1) : Vector(1)) % w).Normal();
         Vector v = w % u;
         Vector d = (u * cos(r1) * r2sqrt + v * sin(r1) * r2sqrt + w * sqrt(1 - r2)).Normal();
-        return obj.emission + objColor.DirectMult(Radiance(Ray(x, d), depth, nRandSeeds));
+        return obj.emission + objColor.DirectMult(Radiance(Ray(x, d), depth));
     }
     else if (obj.material == SPECULAR) // Ideal SPECULAR reflection
     {
-        return obj.emission + objColor.DirectMult(Radiance(Ray(x, ray.direction - normalOut * 2 * normalOut.Dot(ray.direction)), depth, nRandSeeds));
+        return obj.emission + objColor.DirectMult(Radiance(Ray(x, ray.direction - normalOut * 2 * normalOut.Dot(ray.direction)), depth));
     }
     else
     {
@@ -124,7 +124,7 @@ Vector Radiance(const Ray &ray, int depth, unsigned short *nRandSeeds)
         double cos2t;
         if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0) // Total internal reflection
         {
-            return obj.emission + objColor.DirectMult(Radiance(reflRay, depth, nRandSeeds));
+            return obj.emission + objColor.DirectMult(Radiance(reflRay, depth));
         }
         else
         {
@@ -139,9 +139,9 @@ Vector Radiance(const Ray &ray, int depth, unsigned short *nRandSeeds)
             double RP = Re / P;
             double TP = Tr / (1 - P);
             // Russian roulette
-            return obj.emission + objColor.DirectMult(depth > 2 ? (RAND(nRandSeeds) < P ? Radiance(reflRay, depth, nRandSeeds) * RP
-                                                                                        : Radiance(Ray(x, tdir), depth, nRandSeeds) * TP)
-                                                                : Radiance(reflRay, depth, nRandSeeds) * Re + Radiance(Ray(x, tdir), depth, nRandSeeds) * Tr);
+            return obj.emission + objColor.DirectMult(depth > 2 ? (RAND() < P ? Radiance(reflRay, depth) * RP
+                                                                                        : Radiance(Ray(x, tdir), depth) * TP)
+                                                                : Radiance(reflRay, depth) * Re + Radiance(Ray(x, tdir), depth) * Tr);
         }
     }
 }
@@ -150,39 +150,38 @@ int main(int argc, char *argv[])
     srand(time(NULL));
 
     Timer timer;
-    int nImageWidth = 256;
-    int nImageHeight = 192;
-    int nSamplePerSubpixel = 8;                                           // # samples
+    int img_width = 256;
+    int img_height = 192;
+    int sample_per_subpixel = 8;                                           // # samples
     Ray camera(Vector(50, 52, 295.6), Vector(0, -0.042612, -1).Normal()); // cam pos, dir
-    Vector vecFilmX = Vector(nImageWidth * .5135 / nImageHeight);
-    Vector vecFilmY = (vecFilmX % camera.direction).Normal() * .5135;
-    Vector *imageBuffer = new Vector[nImageWidth * nImageHeight];
+    Vector film_x_axis = Vector(img_width * .5135 / img_height);
+    Vector film_y_axis = (film_x_axis % camera.direction).Normal() * .5135;
+    Vector *img_buffer = new Vector[img_width * img_height];
 #pragma omp parallel for schedule(dynamic, 1) private(ray) // OpenMP
-    for (int y = 0; y < nImageHeight; y++)
+    for (int y = 0; y < img_height; y++)
     { // Loop over image rows
         // *** Commented out for Visual Studio, fprintf is not thread-safe
         //fprintf(stderr,"\rRendering (%d spp) %5.2f%%",samps*4,100.*y/(h-1));
-        unsigned short nRandSeeds[3] = {0, 0, y * y * y};                                // *** Moved outside for VS2012
-        for (unsigned short x = 0; x < nImageWidth; x++)                                 // Loop cols
-            for (int sy = 0, i = (nImageHeight - y - 1) * nImageWidth + x; sy < 2; sy++) // 2x2 subpixel rows
+        for (unsigned short x = 0; x < img_width; x++)                                 // Loop cols
+            for (int sy = 0, i = (img_height - y - 1) * img_width + x; sy < 2; sy++) // 2x2 subpixel rows
                 for (int sx = 0; sx < 2; sx++)
                 { // 2x2 subpixel cols
                     Vector ray;
-                    for (int s = 0; s < nSamplePerSubpixel; s++)
+                    for (int s = 0; s < sample_per_subpixel; s++)
                     {
-                        double r1 = 2 * RAND(nRandSeeds), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
-                        double r2 = 2 * RAND(nRandSeeds), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
-                        Vector d = vecFilmX * (((sx + .5 + dx) / 2 + x) / nImageWidth - .5) +
-                                   vecFilmY * (((sy + .5 + dy) / 2 + y) / nImageHeight - .5) + camera.direction;
-                        ray = ray + Radiance(Ray(camera.origin + d * 140, d.Normal()), 0, nRandSeeds) * (1. / nSamplePerSubpixel);
+                        double r1 = 2 * RAND(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+                        double r2 = 2 * RAND(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+                        Vector d = film_x_axis * (((sx + .5 + dx) / 2 + x) / img_width - .5) +
+                                   film_y_axis * (((sy + .5 + dy) / 2 + y) / img_height - .5) + camera.direction;
+                        ray = ray + Radiance(Ray(camera.origin + d * 140, d.Normal()), 0) * (1. / sample_per_subpixel);
                     } // Camera rays are pushed ^^^^^ forward to start in interior
-                    imageBuffer[i] = imageBuffer[i] + Vector(ClampValue(ray.x), ClampValue(ray.y), ClampValue(ray.z)) * .25;
+                    img_buffer[i] = img_buffer[i] + Vector(ClampValue(ray.x), ClampValue(ray.y), ClampValue(ray.z)) * .25;
                 }
         std::cout << "Rendering Progress: " << std::setiosflags(std::ios::fixed)
-                  << std::setprecision(2) << (double)((y + 1) * 100.0 / nImageHeight) << "%" << std::endl;
+                  << std::setprecision(2) << (double)((y + 1) * 100.0 / img_height) << "%" << std::endl;
     }
     FILE *f = fopen("image.ppm", "w"); // Write image to PPM file.
-    fprintf(f, "P3\n%d %d\n%d\n", nImageWidth, nImageHeight, 255);
-    for (int i = 0; i < nImageWidth * nImageHeight; i++)
-        fprintf(f, "%d\n%d\n%d\n", ColorFloat2Int(imageBuffer[i].x), ColorFloat2Int(imageBuffer[i].y), ColorFloat2Int(imageBuffer[i].z));
+    fprintf(f, "P3\n%d %d\n%d\n", img_width, img_height, 255);
+    for (int i = 0; i < img_width * img_height; i++)
+        fprintf(f, "%d\n%d\n%d\n", ColorFloat2Int(img_buffer[i].x), ColorFloat2Int(img_buffer[i].y), ColorFloat2Int(img_buffer[i].z));
 }
