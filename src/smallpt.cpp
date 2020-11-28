@@ -1,32 +1,11 @@
 #include <bits/stdc++.h>
 #include "Timer.hpp"
 #include "Random.hpp"
+#include "Vector.hpp"
+#include "Ray.hpp"
 
 #define pi 3.1415926535897932384626433832795
 
-// 3 维向量，用于空间向量和颜色的表示
-struct Vector
-{
-    double x, y, z;
-    Vector(double x_ = 0, double y_ = 0, double z_ = 0)
-    {
-        x = x_;
-        y = y_;
-        z = z_;
-    }
-    Vector operator+(const Vector &b) const { return Vector(x + b.x, y + b.y, z + b.z); }
-    Vector operator-(const Vector &b) const { return Vector(x - b.x, y - b.y, z - b.z); }
-    Vector operator*(double b) const { return Vector(x * b, y * b, z * b); }
-    Vector DirectMult(const Vector &b) const { return Vector(x * b.x, y * b.y, z * b.z); }
-    Vector &Normal() { return *this = *this * (1 / sqrt(x * x + y * y + z * z)); }
-    double Dot(const Vector &b) const { return x * b.x + y * b.y + z * b.z; } // cross:
-    Vector operator%(Vector &b) { return Vector(y * b.z - z * b.y, z * b.x - x * b.z, x * b.y - y * b.x); }
-};
-struct Ray
-{
-    Vector origin, direction;
-    Ray(Vector o_, Vector d_) : origin(o_), direction(d_) {}
-};
 enum Material
 {
     DIFFUSE,
@@ -180,7 +159,7 @@ int main(int argc, char *argv[])
         std::cout << "Rendering Progress: " << std::setiosflags(std::ios::fixed)
                   << std::setprecision(2) << (double)((y + 1) * 100.0 / img_height) << "%" << std::endl;
     }
-    FILE *f = fopen("image.ppm", "w"); // Write image to PPM file.
+    FILE *f = fopen(argv[1], "w"); // Write image to PPM file.
     fprintf(f, "P3\n%d %d\n%d\n", img_width, img_height, 255);
     for (int i = 0; i < img_width * img_height; i++)
         fprintf(f, "%d\n%d\n%d\n", ColorFloat2Int(img_buffer[i].x), ColorFloat2Int(img_buffer[i].y), ColorFloat2Int(img_buffer[i].z));
