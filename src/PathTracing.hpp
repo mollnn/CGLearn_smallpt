@@ -3,7 +3,7 @@
 
 #include <bits/stdc++.h>
 
-#include "FloatUtil.hpp"
+#include "ColorSpace.hpp"
 
 #include "Timer.hpp"
 #include "Random.hpp"
@@ -28,71 +28,73 @@ inline bool GetIntersect(const Ray &ray, double &t, int &id)
 
 Vector PathTracing(const Ray &ray, int depth)
 {
-    double dist; // distance to intersection
-    int id = 0;  // id of intersected object
-    if (!GetIntersect(ray, dist, id))
-        return Vector();                                                           // if miss, return black
-    const Sphere &obj = spheres[id];                                               // the hit object
-    Vector x = ray.origin + ray.direction * dist;                                  // intersection point
-    Vector normalOut = (x - obj.position).Normal();                                // out-normal of sphere
-    Vector normal = normalOut.Dot(ray.direction) < 0 ? normalOut : normalOut * -1; // fixed surface normal
-    Vector objColor = obj.color;                                                   // object color
-    double p = objColor.x > objColor.y && objColor.x > objColor.z
-                   ? objColor.x
-                   : objColor.y > objColor.z
-                         ? objColor.y
-                         : objColor.z; // max reflection
+    double dist_ray_hitpoint; // 光线起点到命中点的距离
+    int hitobj_id = 0;        // 命中物体编号
+    // 光线与场景物体求交，若未命中则返回背景色
+    if (!GetIntersect(ray, dist_ray_hitpoint, hitobj_id))
+        return Vector();
+    const Sphere &hitobj = spheres[hitobj_id];                                        // 命中物体
+    Vector hit_point = ray.origin + ray.direction * dist_ray_hitpoint;                // 命中点
+    Vector normal_out = (hit_point - hitobj.position).Normal();                       // 命中球体的外向法线
+    Vector normal = normal_out.Dot(ray.direction) < 0 ? normal_out : normal_out * -1; // 实际发生折反射的法线
+    Vector hitobj_color = hitobj.color;                                               // 命中物体的颜色
+    double p = hitobj_color.x > hitobj_color.y && hitobj_color.x > hitobj_color.z
+                   ? hitobj_color.x
+                   : hitobj_color.y > hitobj_color.z
+                         ? hitobj_color.y
+                         : hitobj_color.z; // 最大反射强度，用于退出判断
     if (depth > 100)
-        return obj.emission; //  prevent stack overflow
+        return hitobj.emission; // prevent stack overflow
+    // 俄罗斯轮盘
     if (++depth > 5)
         if (RAND() < p)
-            objColor = objColor * (1 / p);
+            hitobj_color = hitobj_color * (1 / p);
         else
-            return obj.emission; //R.R.
-    if (obj.material == DIFFUSE) // Ideal DIFFUSE reflection
+            return hitobj.emission; //R.R.
+    if (hitobj.material == DIFFUSE) // Ideal DIFFUSE reflection
     {
-        double r1 = 2 * pi * RAND();
-        double r2 = RAND();
-        double r2sqrt = sqrt(r2);
-        Vector w = normal;
-        Vector u = ((fabs(w.x) > .1 ? Vector(0, 1) : Vector(1)) % w).Normal();
-        Vector v = w % u;
-        Vector d = (u * cos(r1) * r2sqrt + v * sin(r1) * r2sqrt + w * sqrt(1 - r2)).Normal();
-        return obj.emission + objColor.DirectMult(PathTracing(Ray(x, d), depth));
+        double phi = 2 * pi * RAND();
+        double radius_pow2 = RAND();
+        double radius = sqrt(radius_pow2);
+        Vector unitvec_z = normal;
+        Vector unitvec_x = ((fabs(unitvec_z.x) > .1 ? Vector(0, 1) : Vector(1)) % unitvec_z).Normal();
+        Vector unitvec_y = unitvec_z % unitvec_x;
+        Vector diffuse_ray_dir = (unitvec_x * cos(phi) * radius + unitvec_y * sin(phi) * radius + unitvec_z * sqrt(1 - radius_pow2)).Normal();
+        return hitobj.emission + hitobj_color.DirectMult(PathTracing(Ray(hit_point, diffuse_ray_dir), depth));
     }
-    else if (obj.material == SPECULAR) // Ideal SPECULAR reflection
+    else if (hitobj.material == SPECULAR) // Ideal SPECULAR reflection
     {
-        return obj.emission + objColor.DirectMult(PathTracing(Ray(x, ray.direction - normalOut * 2 * normalOut.Dot(ray.direction)), depth));
+        return hitobj.emission + hitobj_color.DirectMult(PathTracing(Ray(hit_point, ray.direction - normal_out * 2 * normal_out.Dot(ray.direction)), depth));
     }
-    else
+    else if (hitobj.material == REFRECT)
     {
-        Ray reflRay(x, ray.direction - normalOut * 2 * normalOut.Dot(ray.direction)); // Ideal dielectric REFRACTION
-        bool into = normalOut.Dot(normal) > 0;                                        // Ray from outside going in?
-        double nc = 1;
-        double nt = 1.5;
-        double nnt = into ? nc / nt : nt / nc;
-        double ddn = ray.direction.Dot(normal);
-        double cos2t;
-        if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0) // Total internal reflection
+        Ray reflect_ray(hit_point, ray.direction - normal_out * 2 * normal_out.Dot(ray.direction)); // Ideal dielectric REFRACTION
+        bool flag_into_sphere = normal_out.Dot(normal) > 0;                                         // Ray from outside going in?
+        double refrect_index_out = 1;
+        double refrect_index_in = 1.5;
+        double refrect_index_eff = flag_into_sphere ? refrect_index_out / refrect_index_in : refrect_index_in / refrect_index_out;
+        double cos_i = ray.direction.Dot(normal);
+        double cos_2t = 1 - refrect_index_eff * refrect_index_eff * (1 - cos_i * cos_i);
+        if (cos_2t < 0) // Total internal reflection
         {
-            return obj.emission + objColor.DirectMult(PathTracing(reflRay, depth));
+            return hitobj.emission + hitobj_color.DirectMult(PathTracing(reflect_ray, depth));
         }
         else
         {
-            Vector tdir = (ray.direction * nnt - normalOut * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).Normal();
-            double a = nt - nc;
-            double b = nt + nc;
-            double R0 = a * a / (b * b);
-            double c = 1 - (into ? -ddn : tdir.Dot(normalOut));
-            double Re = R0 + (1 - R0) * c * c * c * c * c;
-            double Tr = 1 - Re;
-            double P = .25 + .5 * Re;
-            double RP = Re / P;
-            double TP = Tr / (1 - P);
+            Vector refrect_dir = (ray.direction * refrect_index_eff - normal_out * ((flag_into_sphere ? 1 : -1) * (cos_i * refrect_index_eff + sqrt(cos_2t)))).Normal();
+            double refrect_index_delta = refrect_index_in - refrect_index_out;
+            double refrect_index_sum = refrect_index_in + refrect_index_out;
+            double fresnel_i0 = refrect_index_delta * refrect_index_delta / (refrect_index_sum * refrect_index_sum);
+            double res_cos = 1 - (flag_into_sphere ? -cos_i : refrect_dir.Dot(normal_out));
+            double reflect_intensity = fresnel_i0 + (1 - fresnel_i0) * res_cos * res_cos * res_cos * res_cos * res_cos;
+            double refrect_intensity = 1 - reflect_intensity;
+            double reflect_probability = .25 + .5 * reflect_intensity;
+            double reflect_coefficient = reflect_intensity / reflect_probability;
+            double refrect_coefficient = refrect_intensity / (1 - reflect_probability);
             // Russian roulette
-            return obj.emission + objColor.DirectMult(depth > 2 ? (RAND() < P ? PathTracing(reflRay, depth) * RP
-                                                                                        : PathTracing(Ray(x, tdir), depth) * TP)
-                                                                : PathTracing(reflRay, depth) * Re + PathTracing(Ray(x, tdir), depth) * Tr);
+            return hitobj.emission + hitobj_color.DirectMult(depth > 2 ? (RAND() < reflect_probability ? PathTracing(reflect_ray, depth) * reflect_coefficient
+                                                                                     : PathTracing(Ray(hit_point, refrect_dir), depth) * refrect_coefficient)
+                                                                       : PathTracing(reflect_ray, depth) * reflect_intensity + PathTracing(Ray(hit_point, refrect_dir), depth) * refrect_intensity);
         }
     }
 }
