@@ -51,49 +51,56 @@ Vector PathTracing(const Ray &ray, int depth)
             hitobj_color = hitobj_color * (1 / p);
         else
             return hitobj.emission; //R.R.
-    if (hitobj.material == DIFFUSE) // Ideal DIFFUSE reflection
+    if (hitobj.material == DIFFUSE) // 漫反射
     {
+        // 随机生成一个光线方向
         double phi = 2 * pi * RAND();
         double radius_pow2 = RAND();
         double radius = sqrt(radius_pow2);
+        // 生成微平面上的坐标轴
         Vector unitvec_z = normal;
         Vector unitvec_x = ((fabs(unitvec_z.x) > .1 ? Vector(0, 1) : Vector(1)) % unitvec_z).Normal();
         Vector unitvec_y = unitvec_z % unitvec_x;
+        // 计算漫反射光线方向
         Vector diffuse_ray_dir = (unitvec_x * cos(phi) * radius + unitvec_y * sin(phi) * radius + unitvec_z * sqrt(1 - radius_pow2)).Normal();
+        // 递归计算漫反射
         return hitobj.emission + hitobj_color.DirectMult(PathTracing(Ray(hit_point, diffuse_ray_dir), depth));
     }
-    else if (hitobj.material == SPECULAR) // Ideal SPECULAR reflection
+    else if (hitobj.material == SPECULAR) // 高光反射
     {
+        // 递归计算高光反射
         return hitobj.emission + hitobj_color.DirectMult(PathTracing(Ray(hit_point, ray.direction - normal_out * 2 * normal_out.Dot(ray.direction)), depth));
     }
-    else if (hitobj.material == REFRECT)
+    else if (hitobj.material == REFRECT) // 折射
     {
-        Ray reflect_ray(hit_point, ray.direction - normal_out * 2 * normal_out.Dot(ray.direction)); // Ideal dielectric REFRACTION
-        bool flag_into_sphere = normal_out.Dot(normal) > 0;                                         // Ray from outside going in?
-        double refrect_index_out = 1;
-        double refrect_index_in = 1.5;
-        double refrect_index_eff = flag_into_sphere ? refrect_index_out / refrect_index_in : refrect_index_in / refrect_index_out;
-        double cos_i = ray.direction.Dot(normal);
-        double cos_2t = 1 - refrect_index_eff * refrect_index_eff * (1 - cos_i * cos_i);
-        if (cos_2t < 0) // Total internal reflection
+        Ray reflect_ray(hit_point, ray.direction - normal_out * 2 * normal_out.Dot(ray.direction));                                // 反射光线
+        bool flag_into_sphere = normal_out.Dot(normal) > 0;                                                                        // 光线的方向
+        double refrect_index_out = 1;                                                                                              // 外部折射率
+        double refrect_index_in = 1.5;                                                                                             // 内部折射率
+        double refrect_index_eff = flag_into_sphere ? refrect_index_out / refrect_index_in : refrect_index_in / refrect_index_out; // 相对折射率
+        double cos_i = ray.direction.Dot(normal);                                                                                  // cos 入射角
+        double cos_t_pow2 = 1 - refrect_index_eff * refrect_index_eff * (1 - cos_i * cos_i);
+        if (cos_t_pow2 < 0) // 发生全反射
         {
+            // 仅递归计算反射光线
             return hitobj.emission + hitobj_color.DirectMult(PathTracing(reflect_ray, depth));
         }
         else
         {
-            Vector refrect_dir = (ray.direction * refrect_index_eff - normal_out * ((flag_into_sphere ? 1 : -1) * (cos_i * refrect_index_eff + sqrt(cos_2t)))).Normal();
-            double refrect_index_delta = refrect_index_in - refrect_index_out;
-            double refrect_index_sum = refrect_index_in + refrect_index_out;
-            double fresnel_i0 = refrect_index_delta * refrect_index_delta / (refrect_index_sum * refrect_index_sum);
-            double res_cos = 1 - (flag_into_sphere ? -cos_i : refrect_dir.Dot(normal_out));
-            double reflect_intensity = fresnel_i0 + (1 - fresnel_i0) * res_cos * res_cos * res_cos * res_cos * res_cos;
-            double refrect_intensity = 1 - reflect_intensity;
-            double reflect_probability = .25 + .5 * reflect_intensity;
-            double reflect_coefficient = reflect_intensity / reflect_probability;
-            double refrect_coefficient = refrect_intensity / (1 - reflect_probability);
+            Vector refrect_dir = (ray.direction * refrect_index_eff - normal_out * ((flag_into_sphere ? 1 : -1) * (cos_i * refrect_index_eff + sqrt(cos_t_pow2)))).Normal(); // 折射光线
+            double refrect_index_delta = refrect_index_in - refrect_index_out;                                                                                               // 折射率之差
+            double refrect_index_sum = refrect_index_in + refrect_index_out;                                                                                                 // 折射率之和
+            double fresnel_i0 = refrect_index_delta * refrect_index_delta / (refrect_index_sum * refrect_index_sum);                                                         // 菲涅尔反射强度项
+            double fresnel_tmp = 1 - (flag_into_sphere ? -cos_i : refrect_dir.Dot(normal_out));                                                                              // 用于计算实际反射强度的临时项，与角度相关
+            double reflect_intensity = fresnel_i0 + (1 - fresnel_i0) * fresnel_tmp * fresnel_tmp * fresnel_tmp * fresnel_tmp * fresnel_tmp;                                  // 反射强度
+            double refrect_intensity = 1 - reflect_intensity;                                                                                                                // 折射强度
+            double reflect_probability = .25 + .5 * reflect_intensity;                                                                                                       // 生成反射光线的概率
+            double refrect_probability = 1 - reflect_probability;                                                                                                            // 生成折射光线的概率
+            double reflect_coefficient = reflect_intensity / reflect_probability;                                                                                            // 反射光线的权重系数
+            double refrect_coefficient = refrect_intensity / refrect_probability;                                                                                            // 折射光线的权重系数
             // Russian roulette
             return hitobj.emission + hitobj_color.DirectMult(depth > 2 ? (RAND() < reflect_probability ? PathTracing(reflect_ray, depth) * reflect_coefficient
-                                                                                     : PathTracing(Ray(hit_point, refrect_dir), depth) * refrect_coefficient)
+                                                                                                       : PathTracing(Ray(hit_point, refrect_dir), depth) * refrect_coefficient)
                                                                        : PathTracing(reflect_ray, depth) * reflect_intensity + PathTracing(Ray(hit_point, refrect_dir), depth) * refrect_intensity);
         }
     }

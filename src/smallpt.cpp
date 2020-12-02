@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
                         ans = ans + PathTracing(Ray(camera.origin + ray_direction * clip_near, ray_direction.Normal()), 0) * (1.0 / sample_per_subpixel);
                     }
                     // 将贡献加入图像缓冲区中
-                    img_buffer[pixel_id] = img_buffer[pixel_id] + Vector(RadianceToBrightness(ans.x), RadianceToBrightness(ans.y), RadianceToBrightness(ans.z)) * (1.0 / subpixel_per_pixel_h / subpixel_per_pixel_w);
+                    img_buffer[pixel_id] += Vector(RadianceToBrightness(ans.x), RadianceToBrightness(ans.y), RadianceToBrightness(ans.z)) * (1.0 / subpixel_per_pixel_h / subpixel_per_pixel_w);
                 }
             }
 
